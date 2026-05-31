@@ -6,6 +6,7 @@ import psutil
 
 from .models import ActionResult, LLMDecision, ProcessInfo
 from .policy import local_veto
+from .rules import UserRules
 
 
 def _same_process(snapshot: ProcessInfo, live: psutil.Process) -> bool:
@@ -22,9 +23,11 @@ def terminate_process(
     decision: LLMDecision,
     *,
     dry_run: bool,
+    rules: UserRules | None = None,
+    policy_mode: str = "auto",
     wait_sec: float = 8.0,
 ) -> ActionResult:
-    veto = local_veto(process, decision)
+    veto = local_veto(process, decision, rules=rules, mode=policy_mode)
     if not veto.allowed:
         return ActionResult(
             pid=process.pid,

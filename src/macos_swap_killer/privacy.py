@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from .models import ProcessInfo, ProcessSummary
+from .playbooks import advise_process
 
 
 SECRET_ARG_RE = re.compile(
@@ -35,6 +36,7 @@ def _redact_path_match(match: re.Match[str]) -> str:
 
 
 def summarize_process(process: ProcessInfo) -> ProcessSummary:
+    advice = advise_process(process)
     return ProcessSummary(
         pid=process.pid,
         ppid=process.ppid,
@@ -45,6 +47,10 @@ def summarize_process(process: ProcessInfo) -> ProcessSummary:
         memory_percent=round(process.memory_percent, 2),
         executable_category=process.executable_category,
         is_gui_main=process.is_gui_main,
+        app_family=advice.app_family,
+        playbook_role=advice.role,
+        playbook_recommendation=advice.recommendation,
+        playbook_reason=advice.reason,
         redacted_cmdline=[redact_text(arg) for arg in process.cmdline[:20]],
     )
 

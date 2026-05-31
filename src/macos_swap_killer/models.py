@@ -27,6 +27,16 @@ class SwapInfo(BaseModel):
     memory_free_percent: int | None = None
 
 
+class TrendInfo(BaseModel):
+    window_sec: int
+    sample_count: int = 0
+    first_used_gib: float | None = None
+    latest_used_gib: float | None = None
+    growth_gib: float = 0.0
+    triggered: bool = False
+    reason: str = ""
+
+
 class ProcessInfo(BaseModel):
     pid: int
     ppid: int | None = None
@@ -57,6 +67,10 @@ class ProcessSummary(BaseModel):
     memory_percent: float
     executable_category: str
     is_gui_main: bool
+    app_family: str | None = None
+    playbook_role: str | None = None
+    playbook_recommendation: str | None = None
+    playbook_reason: str | None = None
     redacted_cmdline: list[str]
 
 
@@ -88,6 +102,8 @@ class IncidentResult(BaseModel):
     swap: SwapInfo
     dry_run: bool
     message: str
+    trigger_reason: str = ""
+    trend: TrendInfo | None = None
     decisions: list[LLMDecision] = Field(default_factory=list)
     actions: list[ActionResult] = Field(default_factory=list)
     vetoes: list[dict[str, Any]] = Field(default_factory=list)

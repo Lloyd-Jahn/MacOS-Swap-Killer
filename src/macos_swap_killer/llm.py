@@ -32,6 +32,8 @@ Return only valid JSON matching this schema:
 Rules:
 - The local program will enforce additional safeguards, but you must still be conservative.
 - Use TERMINATE only for low-risk, user-owned helper, renderer, cache, build, test, worker, or background child processes.
+- Treat app_family, playbook_role, playbook_recommendation, and playbook_reason as local app-specific guidance.
+- If playbook_recommendation is protect or ask_confirm, do not return TERMINATE unless the process is clearly a restartable helper and risk is low.
 - If a process may have unsaved user state, return ASK_CONFIRM or IGNORE.
 - If uncertain, return IGNORE or ASK_CONFIRM. Do not guess.
 - Never return TERMINATE for these hard-protected macOS processes: {", ".join(sorted(NEVER_KILL_NAMES))}.
