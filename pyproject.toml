@@ -24,6 +24,7 @@ dev = [
 
 [project.scripts]
 macos-swap-killer = "macos_swap_killer.cli:app"
+macos-swap-killer-ui = "macos_swap_killer.ui:run_ui"
 
 [tool.setuptools.packages.find]
 where = ["src"]
