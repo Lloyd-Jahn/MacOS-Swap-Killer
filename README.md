@@ -1,27 +1,66 @@
-# MacOS Swap Killer
+<p align="right">
+  English | <a href="./README.zh-CN.md">简体中文</a>
+</p>
 
-<details open>
-<summary>中文</summary>
+<div align="center">
+  <h1>MacOS Swap Killer</h1>
+  <p><strong>A conservative, explainable, dry-run-first macOS swap pressure monitor.</strong></p>
+  <p>
+    Watch swap, memory pressure, and high-memory processes.
+    Let the LLM advise, while local rules and hard safety checks keep final control.
+  </p>
+  <p>
+    <a href="#features">Features</a> ·
+    <a href="#quick-start">Quick Start</a> ·
+    <a href="#mac-ui">Mac UI</a> ·
+    <a href="#safety">Safety</a> ·
+    <a href="#development">Development</a>
+  </p>
+  <p>
+    <img alt="Python" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white">
+    <img alt="Platform" src="https://img.shields.io/badge/Platform-macOS-111111?logo=apple&logoColor=white">
+    <img alt="Mode" src="https://img.shields.io/badge/Default-dry--run-3fb950">
+    <img alt="License" src="https://img.shields.io/badge/License-MIT-blue">
+  </p>
+</div>
 
-## 简介
+## Why
 
-MacOS Swap Killer 是一个保守的 Python 终端工具，用于持续监控 macOS 的 swap、memory pressure 和高内存进程。当 swap 过高或短时间快速增长时，它会收集进程摘要，脱敏后交给 OpenAI-compatible LLM 判断，再由本地安全策略、用户规则和 App playbook 决定是否允许处理。
+When macOS swap starts growing quickly, the whole machine can feel stuck. The hard part is knowing which process is safe to close without losing work.
 
-LLM 只是顾问，本地策略拥有最终否决权。默认是 `--dry-run`，不会真的杀进程；只有显式传入 `--execute` 时，才会对通过本地安全检查的低风险进程发送 `SIGTERM`。v1 不会自动发送 `SIGKILL`。
+MacOS Swap Killer is designed as a cautious local assistant:
 
-## 安装
+- Observe swap, memory pressure, and swap growth trends.
+- Collect high-memory process summaries with command-line redaction.
+- Ask an OpenAI-compatible LLM for advice only.
+- Let local policy, user rules, and app playbooks make the final decision.
+- Stay in `--dry-run` by default. Real termination requires explicit `--execute`.
+
+> [!IMPORTANT]
+> v1 never sends `SIGKILL` automatically. Even in `--execute` mode, it only sends `SIGTERM` to low-risk processes that pass local hard safety checks.
+
+## Features
+
+- **Swap monitoring**: reads from `sysctl`, `top`, or `memory_pressure`.
+- **Trend trigger**: detects fast swap growth before the absolute threshold is reached.
+- **LLM-assisted classification**: supports OpenAI-style Chat Completions providers, with DeepSeek defaults.
+- **Local hard safety**: protects system processes, root/system-owned processes, current shell context, and protected apps.
+- **User rules**: configure protected, ask-confirm, and auto-terminate patterns in `rules.toml`.
+- **App playbooks**: conservative behavior for browsers, VS Code, Jupyter, Node, Docker, local AI, chat, and notes apps.
+- **Reports and notifications**: stores event logs, renders summaries, and sends macOS notifications when possible.
+- **Launchd support**: install a user-level background agent, still dry-run by default.
+- **Mac UI**: a small local status window for reports, dry-run scans, and config/rules access.
+
+## Quick Start
 
 ```bash
 python3 -m pip install -e ".[dev]"
-```
-
-## 配置
-
-```bash
 macos-swap-killer init
+macos-swap-killer doctor
+macos-swap-killer once --threshold-gib 0 --dry-run
 ```
 
-配置文件：
+Config files are created under:
 
 ```text
 ~/Library/Application Support/MacOS Swap Killer/config.toml
@@ -29,7 +68,7 @@ macos-swap-killer init
 ~/Library/Application Support/MacOS Swap Killer/rules.toml
 ```
 
-DeepSeek V4 Flash 默认配置：
+Default LLM environment values:
 
 ```text
 MSK_API_KEY=your_api_key_here
@@ -37,194 +76,52 @@ MSK_BASE_URL=https://api.deepseek.com
 MSK_MODEL=deepseek-v4-flash
 ```
 
-也可以换成任何 OpenAI-compatible 服务，只要保留 Chat Completions 兼容接口。
+You can use any OpenAI-compatible provider that exposes a Chat Completions-style endpoint.
 
-## 使用
+## Mac UI
 
-检查本机依赖、配置、规则和 swap 采集能力：
+The original project was CLI-only. This branch adds a lightweight local macOS window built with Python standard-library `tkinter`, avoiding Electron or large frontend dependencies.
+
+Start it with:
+
+```bash
+macos-swap-killer ui
+```
+
+or:
+
+```bash
+macos-swap-killer-ui
+```
+
+The current UI can:
+
+- Show swap used, memory free, API key status, model, event count, incident count, and launchd status.
+- Initialize config files.
+- Run one dry-run scan.
+- Show the latest report.
+- Open the config directory and rules file.
+
+The UI is intentionally a status panel and safe operation entry point. It does not hide automatic cleanup behind a button; real termination still requires the CLI `--execute` flag.
+
+## CLI
 
 ```bash
 macos-swap-killer doctor
-```
-
-不实际终止进程，做一次测试扫描：
-
-```bash
-macos-swap-killer once --threshold-gib 0 --dry-run
-```
-
-允许终端交互确认：
-
-```bash
-macos-swap-killer once --threshold-gib 0 --dry-run --interactive
-```
-
-前台持续监控：
-
-```bash
+macos-swap-killer once --dry-run
+macos-swap-killer once --dry-run --interactive
 macos-swap-killer watch --dry-run
-```
-
-允许保守自动清理：
-
-```bash
-macos-swap-killer watch --execute
-```
-
-安装用户级 launchd 后台服务，默认仍是 dry-run：
-
-```bash
-macos-swap-killer install-agent
-macos-swap-killer agent-status
-macos-swap-killer uninstall-agent
-```
-
-如果确实要让 launchd 后台执行允许的 `SIGTERM`：
-
-```bash
-macos-swap-killer install-agent --execute
-```
-
-## 用户规则
-
-创建或查看规则文件：
-
-```bash
+macos-swap-killer report
 macos-swap-killer rules
 ```
 
-`rules.toml` 支持：
-
-- `protected.names`：永远保护，即使手动确认也不终止。
-- `ask_confirm.names` / `ask_confirm.cmdline_contains`：只建议，必须交互确认。
-- `auto_terminate.names` / `auto_terminate.cmdline_contains`：仍需 LLM 低风险判断和本地硬安全检查通过，才可能自动 `SIGTERM`。
-
-默认规则保护 `WeChat`、`QQ`、`Notes`，并对浏览器、编辑器、Docker、Jupyter、本地 AI 服务采取更保守的确认策略。
-
-## 趋势触发
-
-除了 `swap_threshold_gib = 10`，工具还会记录最近窗口内的 swap 样本。默认当 10 分钟内 swap 增长超过 `2 GiB` 时，也会触发一次 incident。这样可以在 swap 还没到 10G、但正在快速恶化时提前提醒。
-
-## App Playbook
-
-内置 playbook 会区分常见场景：
-
-- Chrome/Edge/Safari：主 App 保护，renderer/helper 可低风险处理。
-- VS Code：主 App 保护，extension host 默认确认，renderer/helper 可低风险处理。
-- Python/Jupyter：notebook kernel 默认确认，测试进程可低风险处理。
-- Node：测试和构建 worker 可低风险处理，服务类默认确认。
-- Docker、本地 AI、聊天和笔记类 App 默认更保守。
-
-## 报告和通知
-
-事件发生时会尝试发送 macOS Notification Center 通知。
-
-查看摘要报告：
-
-```bash
-macos-swap-killer report
-macos-swap-killer report --json
-macos-swap-killer report --raw
-```
-
-日志：
-
-```text
-~/Library/Logs/MacOS Swap Killer/swap-killer.log
-~/Library/Application Support/MacOS Swap Killer/events.jsonl
-~/Library/Application Support/MacOS Swap Killer/history.jsonl
-```
-
-## 安全边界
-
-以下进程在本地代码和 LLM system prompt 中都被硬保护，永远不会被自动终止：
-
-```text
-WindowServer
-kernel_task
-launchd
-loginwindow
-Finder
-Dock
-SystemUIServer
-```
-
-工具还会本地否决 root/system 用户进程、关键系统路径进程、PID 复用、当前进程、父 shell、受用户规则保护的进程，以及 LLM 输出不确定或格式错误的情况。
-
-</details>
-
-<details>
-<summary>English</summary>
-
-## Overview
-
-MacOS Swap Killer is a conservative Python terminal tool for monitoring macOS swap, memory pressure, and high-memory processes. When swap is high or growing quickly, it collects process summaries, redacts sensitive data, asks an OpenAI-compatible LLM for classification, and then lets local safety policy, user rules, and app-specific playbooks make the final decision.
-
-The LLM is advisory only. Local policy can always veto. The default mode is `--dry-run`, so no process is terminated unless you explicitly pass `--execute`. v1 never sends `SIGKILL` automatically.
-
-## Install
-
-```bash
-python3 -m pip install -e ".[dev]"
-```
-
-## Configure
-
-```bash
-macos-swap-killer init
-```
-
-Config files:
-
-```text
-~/Library/Application Support/MacOS Swap Killer/config.toml
-~/Library/Application Support/MacOS Swap Killer/.env
-~/Library/Application Support/MacOS Swap Killer/rules.toml
-```
-
-Default DeepSeek V4 Flash config:
-
-```text
-MSK_API_KEY=your_api_key_here
-MSK_BASE_URL=https://api.deepseek.com
-MSK_MODEL=deepseek-v4-flash
-```
-
-You can use any OpenAI-compatible provider as long as it supports a Chat Completions-compatible endpoint.
-
-## Usage
-
-Check local dependencies, config, rules, and swap visibility:
-
-```bash
-macos-swap-killer doctor
-```
-
-Run one test scan without terminating anything:
-
-```bash
-macos-swap-killer once --threshold-gib 0 --dry-run
-```
-
-Enable terminal confirmation for `ASK_CONFIRM` decisions:
-
-```bash
-macos-swap-killer once --threshold-gib 0 --dry-run --interactive
-```
-
-Run foreground monitoring:
-
-```bash
-macos-swap-killer watch --dry-run
-```
-
-Allow conservative automatic cleanup:
+Enable conservative real actions only when you mean it:
 
 ```bash
 macos-swap-killer watch --execute
 ```
 
-Install a user launchd agent. It runs in dry-run mode by default:
+Install a user-level launchd agent:
 
 ```bash
 macos-swap-killer install-agent
@@ -232,7 +129,7 @@ macos-swap-killer agent-status
 macos-swap-killer uninstall-agent
 ```
 
-To allow the launchd agent to send approved `SIGTERM` actions:
+Allow the background agent to send approved `SIGTERM` actions:
 
 ```bash
 macos-swap-killer install-agent --execute
@@ -240,7 +137,7 @@ macos-swap-killer install-agent --execute
 
 ## User Rules
 
-Create or show the local rules file:
+Create or inspect the local rules file:
 
 ```bash
 macos-swap-killer rules
@@ -250,29 +147,11 @@ macos-swap-killer rules
 
 - `protected.names`: never terminate, even after manual confirmation.
 - `ask_confirm.names` / `ask_confirm.cmdline_contains`: suggest only, require interactive confirmation.
-- `auto_terminate.names` / `auto_terminate.cmdline_contains`: still requires a low-risk LLM decision and all hard local checks.
+- `auto_terminate.names` / `auto_terminate.cmdline_contains`: still requires low-risk LLM advice and local hard safety checks.
 
-Default rules protect `WeChat`, `QQ`, and `Notes`, and handle browsers, editors, Docker, Jupyter, and local AI services conservatively.
+Default rules protect `WeChat`, `QQ`, and `Notes`, and treat browsers, editors, Docker, Jupyter, and local AI services conservatively.
 
-## Trend Trigger
-
-In addition to `swap_threshold_gib = 10`, the tool records recent swap samples. By default, if swap grows by more than `2 GiB` within 10 minutes, it triggers an incident before the absolute threshold is reached.
-
-## App Playbooks
-
-Built-in playbooks distinguish common workloads:
-
-- Chrome/Edge/Safari: protect the main app; renderer/helper processes may be low-risk.
-- VS Code: protect the main app; extension hosts require confirmation; renderer/helper processes may be low-risk.
-- Python/Jupyter: notebook kernels require confirmation; test workers may be low-risk.
-- Node: test/build workers may be low-risk; service-like processes require confirmation.
-- Docker, local AI, chat, and notes apps are handled conservatively.
-
-## Reports And Notifications
-
-Incidents attempt to send macOS Notification Center alerts.
-
-Show summary reports:
+## Reports
 
 ```bash
 macos-swap-killer report
@@ -280,7 +159,7 @@ macos-swap-killer report --json
 macos-swap-killer report --raw
 ```
 
-Logs:
+Logs and event files:
 
 ```text
 ~/Library/Logs/MacOS Swap Killer/swap-killer.log
@@ -290,7 +169,7 @@ Logs:
 
 ## Safety
 
-The following processes are hard-protected in both local code and the LLM system prompt. They are never automatically terminated:
+These processes are hard-protected in both local code and the LLM system prompt, and are never automatically terminated:
 
 ```text
 WindowServer
@@ -304,4 +183,35 @@ SystemUIServer
 
 The tool also locally vetoes root/system-owned processes, critical system paths, PID reuse, the current process, the parent shell, user-protected processes, malformed LLM responses, and uncertain LLM decisions.
 
-</details>
+## Development
+
+```bash
+python3 -m pip install -e ".[dev]"
+pytest
+```
+
+Project layout:
+
+```text
+src/macos_swap_killer/
+  cli.py            # Typer CLI
+  ui.py             # lightweight Mac UI
+  monitor.py        # incident orchestration
+  policy.py         # local hard safety policy
+  rules.py          # user rules
+  playbooks.py      # app-specific behavior hints
+  reporting.py      # event summaries
+  launchd.py        # user agent install/status
+tests/
+```
+
+## Roadmap
+
+- Package the UI as a double-clickable `.app`.
+- Add a README screenshot after running the UI on a real macOS desktop.
+- Add UI settings and rules editing.
+- Add more app playbooks.
+
+## License
+
+MIT

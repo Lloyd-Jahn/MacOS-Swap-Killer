@@ -158,6 +158,18 @@ def agent_status_command() -> None:
     typer.echo(json.dumps(agent_status(), ensure_ascii=False, indent=2))
 
 
+@app.command("ui")
+def ui_command() -> None:
+    """Open the lightweight macOS status window."""
+    from .ui import run_ui
+
+    try:
+        run_ui()
+    except RuntimeError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
+
+
 def _confirm_process(process: ProcessInfo, decision: LLMDecision, reason: str) -> bool:
     typer.echo("")
     typer.echo(f"PID: {process.pid}")
